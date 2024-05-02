@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Transcription</title>
+</head>
+<body>
+    <main>
+        <section id="connectws">
+            <button id="disconnect-button">Disconnect</button>
+        </section>
+        <section id="audio-section" style="display: none;">
+
+            <button id="start" type="button">⏺️</button>
+            <button id="stop" type="button">⏹️</button>
+            <audio src="" controls id="myaudio"></audio>
+
+        </section>
+
+        <section>
+            <ul id="messages"></ul>
+        </section>
+    </main>
+    <script>
+
+
+
+        var ws = new WebSocket("ws://localhost:8760/api/ws");
+        ws.onmessage = function(event) {
+            var messages = document.getElementById('messages')
+            var message = document.createElement('li')
+            var content = document.createTextNode(event.data)
+            message.appendChild(content)
+            messages.appendChild(message)
+        };
+        
+        ws.addEventListener('open', e => {
+            console.log('connection open now');
+            const audioSection = document.getElementById('audio-section')            
+            audioSection.style.display = 'block';
+        });
+
+        const disconnectBth = document.getElementById('disconnect-button');
+
+        disconnectBth.onclick = (e) => {
+            e.preventDefault();
+            if(ws.OPEN) {
+                ws.close();
+            }
+        };
+
+        // function sendMessage(event) {
+        //     var input = document.getElementById("messageText")
+        //     ws.send(input.value)
+        //     input.value = ''
+        //     event.preventDefault()
+        // }
+        var record = document.getElementById('start');
+        console.log(record);
+        var stop = document.getElementById('stop');
+        const audio = document.getElementById("myaudio");
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            console.log("getUserMedia supported.");
+            navigator.mediaDevices
+                .getUserMedia(
+                // constraints - only audio needed for this app
+                {
+                    audio: true,
+                },
+                )
+
+                // Success callback
+                .then((stream) => {
+                    console.log(stream);
+                    let isRecording = false;
+                    let chunks = [];
+                    const mediaRecorder = new MediaRecorder(stream, );
+
+
+                    mediaRecorder.ondataavailable = (e) => {
+                        chunks.push(e.data);
+                        console.log('data', (e.data));
+                        //TODO: send data to web server
+                        ws.send(e.data);
+
+                    };
+
+                    record.onclick = () => {
+                    
+                        stop.disabled = false;
+                        record.disabled = true;
+
+                        mediaRecorder.start();
+                        console.log(mediaRecorder.state);
+                        isRecording = true;
+                        console.log("recorder started");
+                        
+                        const interval = setInterval(() => {
+                            if (isRecording) {
+                                mediaRecorder.requestData()
+                            } else {
+                                clearInterval(interval)
+                            }
+                        }, 5000);
+                        
+                        mediaRecorder.onstop = (e) => {
+                            console.log("recorder stoped");
+                            isRecording = false;
+                            ws.send(JSON.stringify({'status': 'STOP'}))
+                            const blob = new Blob(chunks, { type: "audio/ogg; codecs=opus" });
+                            const audioURL = window.URL.createObjectURL(blob);
+                            audio.src = audioURL;
+                        }
+
+                    };
+
+                    stop.onclick = () => {
+
+                        stop.disabled = true;
+                        record.disabled = false;
+                        mediaRecorder.stop();
+                        console.log(mediaRecorder.state); 
+
+                    };
+
+
+                })
+
+                // Error callback
+                .catch((err) => {
+                console.error(`The following getUserMedia error occurred: ${err}`);
+                });
+            } else {
+            console.log("getUserMedia not supported on your browser!");
+        }
+    </script>
+    <!-- https://www.esegece.com/websockets/articles/features/225-websocket-upload-files-from-javascript -->
+</body>
+</html>
